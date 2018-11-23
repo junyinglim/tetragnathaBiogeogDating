@@ -6,9 +6,10 @@ import os
 from Bio import AlignIO
 from Bio.Align import MultipleSeqAlignment
 
-seqDir = "/Users/junyinglim/spiders/phylo/ultros"
+seq_dir = "/Users/junyinglim/Dropbox/spiders/phylo/ultros"
+output_dir = "/Users/junyinglim/Dropbox/spiders/phylo/tetragnathaBiogeogDating/data/alignments"
 
-full_align = AlignIO.read("ultros.fas", "fasta")
+full_align = AlignIO.read(os.path.join(seq_dir, "ultros.fas"), "fasta")
     
 # Locus positions
 # 1. 18S (1-269) AGCGCACACAAGAAA
@@ -30,5 +31,5 @@ locusEnd = [269,495,795,1165,1524,1852,2183,2539,2904,3322]
 for i in range(0, len(locusNames)):
 	locusAlign = [seq[locusStart[i]:locusEnd[i]] for seq in full_align]
 	msa = MultipleSeqAlignment(locusAlign)
-	AlignIO.write(msa, "vargas_"+locusNames[i]+".fasta", "fasta")
+	AlignIO.write(msa, os.path.join(output_dir, "ultros_"+locusNames[i]+".fasta"), "fasta")
 
