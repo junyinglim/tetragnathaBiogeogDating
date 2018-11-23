@@ -1,0 +1,90 @@
+# default settings for scripting
+
+# 2 different approaches
+# 1) use the same constraints as Julian Casquet
+# 2) use the Landis approach
+
+# filenames
+
+## IMPORT DATA ========================
+
+mol_filenames <- listFiles("data/alignments")
+n_data_subsets <- mol_filenames.size()
+for (i in 1:n_data_subsets) {
+    data[i] = readDiscreteCharacterData(mol_filenames[i])
+}
+
+mvi = 0 # define move counter
+mni = 0 # define monitor counter
+taxa = data[1].taxa()
+n_taxa <- taxa.size()
+n_branches = 2*n_taxa -3
+
+# DEFINE SUBSTITUTION AND TREE MODEL ========================
+# Define priors
+for (i in 1:n_data_subsets){
+  # Substitution model parameters
+  ex[i] ~ dnDirichlet( v(1,1,1,1,1,1) )
+  pi[i] ~ dnDirichlet( v(1,1,1,1) )
+  moves[++mvi] = mvSimplexElementScale(ex[i], alpha = 10, tune = true, weight = 1)
+  moves[++mvi] = mvSimplexElementScale(pi[i], alpha = 10, tune = true, weight = 1)
+
+  # Define rate matrix
+  Q[i] := fnGTR(ex[i], pi[i])
+
+  # Gamma distributed rate variation
+  alpha[i] ~ dnUniform( 0, 1E8 )
+  gamma_rates[i] := fnDiscretizeGamma( alpha[i], alpha[i], 4, false ) # mean of 1, but shape can vary
+  moves[++mvi] = mvScale(alpha[i], weight = 2.0, tune = true)
+  alpha[i].setValue(0.5)
+
+}
+
+# specify a rate multiplier for each partition
+part_rate_mult ~ dnDirichlet( rep(1.0, n_data_subsets) )
+moves[++mvi] = mvBetaSimplex(part_rate_mult, alpha=1.0, tune=true, weight=n_data_subsets)
+moves[++mvi] = mvDirichletSimplex(part_rate_mult, alpha=1.0, tune=true, weight=2.0)
+
+# note that we use here a vector multiplication, 
+# i.e., multiplying each element of part_rate_mult by n_data_subsets
+part_rate := part_rate_mult * n_data_subsets
+
+topology ~ dnUniformTopology(taxa)
+moves[mvi++] = mvSPR(topology, weight = 5.0) # used to be 15
+moves[mvi++] = mvNNI(topology, weight = 5.0) # used to be 0
+
+for(i in 1:n_branches){
+    br_lens[i] ~ dnExponential(10.0)
+    moves[mvi++] = mvScale(br_lens[i], lambda = 1, weight = 1.0, tune = true, tuneTarget = 0.5)
+    moves[mvi++] = mvScale(br_lens[i], lambda = 1, weight = 1.0, tune = true, tuneTarget = 0.1)
+}
+psi := treeAssembly(topology, br_lens)
+
+for(i in 1:n_data_subsets){
+    seq[i] ~ dnPhyloCTMC(tree = psi,
+                         Q = Q[i],
+                         branchRates = part_rate[i],
+                         siteRates = gamma_rates[i],
+                         type = "DNA")
+                         #pInv = pinvar[i])
+    seq[i].clamp(data[i])    
+}
+
+
+
+
+mymodel = model(seq)
+
+monitors[++mni] = mnModel(filename="output/non_clock.log", printgen=10)
+monitors[++mni] = mnFile(psi, filename="output/non_clock.trees", printgen=10)
+monitors[++mni] = mnScreen(printgen=10)
+
+
+## RUN ANALYSIS
+mymcmc = mcmc(mymodel, moves, monitors, nruns = 4)
+mymcmc.burnin(1000, tuningInterval = 100)
+mymcmc.operatorSummary()
+mymcmc.run(12500)
+
+
+

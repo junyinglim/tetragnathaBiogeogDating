@@ -1,0 +1,185 @@
+### ANALYZE MULTIPLEXED AMPLICON SEQUENCING DATA FOR TETRAGNATHA
+
+
+# IMPORT DATA ==============
+# read in the character data
+# filenames <- v("single-marker/12SSpidersPlusJAE.fas",
+# 			   "data/16SSpidersPlusJAE.fas",
+# 			   "data/18MSpidersPlusJAE.fas",
+# 			   "data/28MSpidersPlusJAE.fas",
+# 			   "data/COISpidersPlusJAE.fas",
+# 			   "data/CytBSpidersPlusJAE.fas",
+# 			   "data/H3SpidersPlusJAE.fas",
+# 			   "data/ITS2SpidersPlusJAE.fas",
+# 			   "data/SSUSpidersPlusJAE.fas")
+
+# Analysis parameters
+genes = "nuclear" # or nuclear or both
+reduced = TRUE # of false for the full dataset
+reduced_dir = "koltz/separate-markers_koltz/" # folder with alignments of reduced sampling
+combined_dir = "single-marker/" # folder with alignments with all speicmens
+
+stemname = "nuclear_reduced" # used for all outputs
+
+
+reduced_filenames <- v(reduced_dir+"12S_koltz_clean.fas",
+                       reduced_dir+"16S_koltz_clean.fas",
+                       reduced_dir+"HCO_koltz_clean.fas",
+                       reduced_dir+"CytB_koltz_clean.fas",
+                       reduced_dir+"18S_koltz_clean.fas",
+                       reduced_dir+"28S_koltz_clean.fas",
+                       reduced_dir+"Actin_koltz_clean.fas",
+                       reduced_dir+"H3_koltz_clean.fas",
+                       reduced_dir+"ITS_koltz_clean.fas",
+                       reduced_dir+"SSU_koltz_clean.fas")
+
+full_filenames <- v(combined_dir+"")
+
+# Input datasets
+if(reduced == TRUE){
+    if(genes == "mitochondrial"){
+        indexList <- 1:4
+        for(i in 1:indexList.size()){
+            filenames[i] <- reduced_filenames[indexList[i]]
+        }
+    }
+    if(genes == "nuclear"){
+        indexList <- 5:10
+        for(i in 1:indexList.size()){
+            filenames[i] <- reduced_filenames[indexList[i]]
+        }
+    }
+    if(genes = "both"){
+        filenames <- reduced_filenames
+    }
+
+} else {
+    if(genes == "mitochondrial"){
+        filenames <- v("single-marker/12S.fas",
+            "single-marker/16S.fas",
+            "single-marker/HCO.fas",
+            "single-marker/CytB.fas")    
+    }
+    if(genes == "nuclear"){
+        filenames <- v("/12S.fas",
+             "single-marker/16S.fas",
+             "single-marker/HCO.fas",
+             "single-marker/CytB.fas")        
+    }
+}
+
+# Input taxon data (to fill in missing data)
+if(reduced == TRUE){
+    taxa <- readTaxonData(reduced_dir+"taxa_koltz_clean.txt")
+} else {
+    taxa <- readTaxonData("single-marker/taxon.txt")
+}
+
+# Input alignments for each locus
+n_data_subsets <- filenames.size()
+for (i in 1:n_data_subsets) {
+    data[i] = readDiscreteCharacterData(filenames[i])
+}
+
+# Add missing species names to each alignment (necessary to work)
+for(i in 1:n_data_subsets){
+    data[i].addMissingTaxa( taxa )    
+}
+
+n_species <- data[1].ntaxa()
+n_branches <- 2 * n_species - 3 # unrooted tree
+
+mvi = 0
+mni = 0
+
+# DEFINE SUBSTITUTION MODELS
+# Using a GTR model
+for (i in 1:n_data_subsets) {
+
+    # exchangeability rates for partition i
+    er_prior[i] <- v(1,1,1,1,1,1)
+    er[i] ~ dnDirichlet(er_prior[i])
+    moves[++mvi] = mvSimplexElementScale(er[i], alpha=10, tune=true, weight=3) 
+
+    # stationary frequencies for partition i
+    pi_prior[i] <- v(1,1,1,1)
+    pi[i] ~ dnDirichlet(pi_prior[i])
+    moves[++mvi] = mvSimplexElementScale(pi[i], alpha=10, tune=true, weight=2) 
+
+    # rate matrix for partition i
+    Q[i] := fnGTR(er[i],pi[i]) 
+  
+    # +Gamma for partition i
+    alpha_prior_mean[i] <- ln(2.0)
+    alpha_prior_sd[i] <- 0.587405
+    alpha[i] ~ dnLognormal( alpha_prior_mean[i], alpha_prior_sd[i] )
+    gamma_rates[i] := fnDiscretizeGamma( alpha[i], alpha[i], 4, false )
+
+    # add moves for the alpha parameter
+    moves[++mvi] = mvScale(alpha[i], tune = true, weight = 2)
+
+    # the probability of a site being invariable
+    # pinvar[i] ~ dnBeta(1,1)
+    # moves[++mvi] = mvScale(pinvar[i], lambda=0.1, tune=true, weight=2.0)
+    # moves[++mvi] = mvSlide(pinvar[i], delta=0.1, tune=true, weight=2.0)
+
+}
+
+# Define tree topology prior and topology moves
+
+#topology ~ dnUniformTopology(taxa, outgroup=out_group)
+topology ~ dnUniformTopology(taxa) # not assuming an outgroup
+moves[++mvi] = mvNNI(topology, weight=5.0)
+moves[++mvi] = mvSPR(topology, weight=5.0)
+
+# Branch length prior
+for (i in 1:n_branches) {
+    bl[i] ~ dnExponential(10.0)
+    moves[++mvi] = mvScale(bl[i], tune = true, weight = 5.0)
+}
+
+TL := sum(bl)
+psi := treeAssembly(topology, bl) # initializes a starting tree
+
+
+# Define partition-specific rate multipliers
+# specify a rate multiplier for each partition
+part_rate_mult ~ dnDirichlet( rep(1.0, n_data_subsets) )
+moves[++mvi] = mvBetaSimplex(part_rate_mult, alpha=1.0, tune=true, weight = n_data_subsets)
+moves[++mvi] = mvDirichletSimplex(part_rate_mult, alpha=1.0, tune=true, weight = 2.0)
+
+# note that we use here a vector multiplication, i.e., multiplying each element of part_rate_mult by n_data_subsets
+part_rate := part_rate_mult * n_data_subsets
+
+# Define CTMC model for each partition
+
+for (i in 1:n_data_subsets) {
+    phyloSeq[i] ~ dnPhyloCTMC(tree=psi, Q=Q[i], branchRates=part_rate[i], siteRates=gamma_rates[i], type="DNA")
+    phyloSeq[i].clamp(data[i])
+}
+
+
+# Initialize and run model ======
+mymodel = model(psi)
+
+# add monitors
+monitors[++mni] = mnModel(filename="output/"+stemname+".log",printgen=10)
+monitors[++mni] = mnFile(psi, filename="output/"+stemname+".trees", printgen=10)
+monitors[++mni] = mnScreen(TL, printgen=1000)
+
+# run the analysis
+mymcmc = mcmc(mymodel, moves, monitors, nruns=4)
+mymcmc.burnin(10000, 100)
+mymcmc.run(25000)
+
+# summarize output
+treetrace = readTreeTrace("output/"+stemname+".trees", treetype="non-clock")
+
+
+#treetrace.summarize()
+
+map_tree = mapTree(treetrace,"output/"+stemname+"MAP.tre")
+
+
+# you may want to quit RevBayes now
+q()

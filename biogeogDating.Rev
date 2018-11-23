@@ -1,0 +1,299 @@
+
+## IMPORT DATA ========================
+out_fn <- "output/"
+range_fn = "data/spiders_biogeog.nex"
+geo_fn   = "data/hawaii"
+times_fn = geo_fn + ".times.txt"
+dist_fn  = geo_fn + ".distances.txt"
+
+mol_filenames <- listFiles("data/alignments")
+n_data_subsets <- mol_filenames.size()
+for (i in 1:n_data_subsets) {
+    data[i] = readDiscreteCharacterData(mol_filenames[i])
+}
+
+mvi = 0 # define move counter
+mni = 0 # define monitor counter
+
+# read binary (01) presence-absence range data
+dat_range_01 = readDiscreteCharacterData(range_fn)
+n_areas <- dat_range_01.nchar()
+
+# determine the number of states
+max_areas <- 4 #2
+n_states <- 0
+for (k in 0:max_areas) n_states += choose(n_areas, k)
+
+# convert binary ranges into NaturalNumbers
+dat_range_n = formatDiscreteCharacterData(dat_range_01, "DEC", n_states)
+
+# epoch times
+time_bounds <- readDataDelimitedFile(file=times_fn, delimiter=" ")
+n_epochs <- time_bounds.size()
+n_epochs <- 5
+
+# epoch connectivity
+for (i in 1:n_epochs) {
+    epoch_fn = geo_fn + ".connectivity." + i + ".txt"
+    connectivity[i] <- readDataDelimitedFile(file=epoch_fn, delimiter=" ")
+}
+
+# area distances
+distances <- readDataDelimitedFile(file=dist_fn, delimiter=" ")
+
+distance_sum <- 0.0
+for (i in 1:n_areas) {
+    for (j in i:n_areas) {
+        if (i != j) {
+            distance_sum += distances[i][j]
+        }
+    }
+}
+num_distances = (n_areas * n_areas - n_areas) / 2
+distance_mean <- distance_sum / num_distances
+
+
+# Useful 
+taxa = data[1].taxa()
+n_taxa = taxa.size()
+n_branches = 2 * n_taxa - 2
+
+# get the converted state descriptions
+state_desc = dat_range_n.getStateDescriptions()
+
+# write the state descriptions to file
+state_desc_str = "state,range\n"
+for (i in 1:state_desc.size()){
+    state_desc_str += (i-1) + "," + state_desc[i] + "\n"
+}
+write(state_desc_str, file=out_fn+"state_labels.txt")
+
+
+# DEFINE SUBSTITUTION AND TREE MODEL ========================
+print("test")
+# Define priors
+for (i in 1:n_data_subsets){
+  # Substitution model parameters
+  ex[i] ~ dnDirichlet( v(1,1,1,1,1,1) )
+  pi[i] ~ dnDirichlet( v(1,1,1,1) )
+  moves[++mvi] = mvSimplexElementScale(ex[i], alpha = 10, tune = true, weight = 1)
+  moves[++mvi] = mvSimplexElementScale(pi[i], alpha = 10, tune = true, weight = 1)
+
+  # Define rate matrix
+  Q[i] := fnGTR(ex[i], pi[i])
+
+  # Gamma distributed rate variation
+  alpha[i] ~ dnUniform( 0, 1E8 )
+  gamma_rates[i] := fnDiscretizeGamma( alpha[i], alpha[i], 4, false ) # mean of 1, but shape can vary
+  moves[++mvi] = mvScale(alpha[i], weight = 2.0, tune = true)
+  alpha[i].setValue(0.5)
+
+  # Invariable sites
+    # pinvar[i] ~ dnBeta(1,1)
+    # moves[++mvi] = mvScale(pinvar[i], lambda=2.0, tune=true, weight=1.0)
+    # moves[++mvi] = mvSlide(pinvar[i], delta=1.0, tune=true, weight=1.0)
+}
+
+# specify a rate multiplier for each partition
+part_rate_mult ~ dnDirichlet( rep(1.0, n_data_subsets) )
+moves[++mvi] = mvBetaSimplex(part_rate_mult, alpha=1.0, tune=true, weight=n_data_subsets)
+moves[++mvi] = mvDirichletSimplex(part_rate_mult, alpha=1.0, tune=true, weight=2.0)
+
+# note that we use here a vector multiplication, 
+# i.e., multiplying each element of part_rate_mult by n_data_subsets
+part_rate := part_rate_mult * n_data_subsets
+
+# Clock model
+branch_rate_mean_log ~ dnUniform(-10, 1)
+branch_rate_mean_log.setValue(-3)
+moves[++mvi] = mvSlide(branch_rate_mean_log, delta = 0.01, weight = 5.0, tune = true)
+#moves[++mvi] = mvScale(branch_rate_mean_log, lambda = 1.0, weight = 5.0, tune = true)
+branch_rate_mean := 10^branch_rate_mean_log
+
+branch_rate_sd ~ dnExponential(1 / 0.58)
+moves[++mvi] = mvScaleBactrian(branch_rate_sd, lambda = 1, weight = 10.0, tune = true)
+
+for(j in 1:n_branches) {
+  branch_rates[j] ~ dnLognormal( ln(branch_rate_mean) - (branch_rate_sd^2)/2, branch_rate_sd)
+  moves[++mvi] = mvScaleBactrian(branch_rates[j], lambda=0.5,  weight=2.0)  
+}
+
+## DIVERSIFICATION RATE FOR BIRTH-DEATH TREE MODEL ========================
+print("test2")
+#tertiariaFossil ~ dnUniform(22.8, 34.0)
+originTime ~ dnUniform(6.3, 15)
+moves[++mvi] = mvSlide(originTime, delta = 1.0, weight = 2.0)
+
+# Speciation and extinction rate priors (N0 = 2, Nt = 4,165)
+net_diversification_rate := abs(ln( n_taxa ) / originTime)
+speciation_rate ~ dnExponential( lambda = 1/net_diversification_rate )
+
+turnover ~ dnUniform(0.0, 1.0)
+extinction_rate := turnover * speciation_rate
+
+speciation_rate.setValue(1.0)
+turnover.setValue(0.95)
+
+moves[++mvi] = mvScale(speciation_rate, lambda=1.0, weight=3.0, tune = true) # used to be 5
+#moves[mvi++] = mvScale(speciation_rate, lambda=1.0, weight=2.0, tune = true)
+moves[++mvi] = mvSlide(speciation_rate, delta=0.1, weight=1.0, tune = true)
+#moves[mvi++] = mvScale(turnover, lambda=1.0, weight=1.0, tune = true)
+moves[++mvi] = mvSlide(turnover, delta=0.1, weight=3.0, tune = true) # added tuning
+#moves[mvi++] = mvSlide(turnover, delta=0.01, weight=1.0, tune = true)
+
+
+fbd_tree ~ dnBirthDeath(rootAge = abs(originTime),
+                        lambda = speciation_rate,
+                        mu = extinction_rate,
+                        rho = 1.0,
+                        condition="nTaxa",
+                        taxa = taxa,
+                        sampling = "uniform")
+
+#outgroup_taxa = clade("Te_Ve_Ca_An_AshSus-12D", "Te_Vi_Me_Me_TPhy16-1B")
+#fbd_tree ~ dnConstrainedTopology(fbd_dist, constraints = v(outgroup_taxa))
+#fbd_tree ~ dnConstrainedTopology(fbd_dist)
+
+moves[++mvi] = mvNNI(fbd_tree, weight=30.0)
+moves[++mvi] = mvFNPR(fbd_tree, weight=10.0)
+moves[++mvi] = mvNarrow(fbd_tree, weight = 5.0)
+#moves[++mvi] = mvRateAgeBetaShift(fbd_tree, branch_rates, weight=10.0)
+moves[++mvi] = mvNodeTimeSlideUniform(fbd_tree, weight=20.0)
+
+print("test3")
+
+for(i in 1:n_data_subsets){
+    seq[i] ~ dnPhyloCTMC(tree = fbd_tree,
+                         Q = Q[i],
+                         branchRates = branch_rates * part_rate[i],
+                         siteRates = gamma_rates[i],
+                         type = "DNA")
+                         #pInv = pinvar[i])
+    seq[i].clamp(data[i])    
+}
+
+
+## BIOGEOGRAPHY ========================
+# fix relative anagenetic rate to 1
+rate_bg <- 1.0
+
+# dispersal rate
+dispersal_rate ~ dnExp(5)
+moves[++mvi] = mvScale(dispersal_rate, weight=4)
+
+# extirpation rate
+extirpation_rate ~ dnExp(5)
+moves[++mvi] = mvScale(extirpation_rate, weight=4)
+
+# geographic distance scaler
+distance_scale ~ dnExp(1)
+distance_scale.setValue(0.01)
+moves[++mvi] = mvScale(distance_scale, weight=3)
+
+# then, the dispersal rate matrix
+for (i in 1:n_epochs) {
+    for (j in 1:n_areas) {
+        for (k in 1:n_areas) {
+            dr[i][j][k] <- 0.0
+            if (connectivity[i][j][k] > 0) {
+                dr[i][j][k] := dispersal_rate * (distances[j][k] / distance_mean)^-distance_scale
+            }
+        }
+    }
+}
+
+# the extirpation rate matrix
+for (i in 1:n_epochs) {
+    for (j in 1:n_areas) {
+        for (k in 1:n_areas) {
+            er[i][j][k] <- 0.0
+        }
+        if (connectivity[i][j][j] > 0) {
+            er[i][j][j] := extirpation_rate
+        }
+    }
+}
+
+# build DEC rate matrices
+for (i in 1:n_epochs) {
+    Q_DEC[i] := fnDECRateMatrix(dispersalRates=dr[i],
+                                extirpationRates=er[i],
+                                maxRangeSize=max_areas,
+                                nullRange="CondSurv")
+}
+
+# build the epoch times
+for (i in 1:n_epochs) {
+    time_max[i] <- time_bounds[i][1]
+    time_min[i] <- time_bounds[i][2]
+
+    if (i == n_epochs) {
+        epoch_times[i] <- 0.0
+    } else {
+        epoch_times[i] ~ dnUniform(time_min[i], time_max[i])
+        moves[++mvi] = mvSlide(epoch_times[i], delta=(time_bounds[i][1]-time_bounds[i][2])/2)
+    }
+}
+
+print("test4")
+# combine the epoch rate matrices and times
+Q_DEC_epoch := fnEpoch(Q=Q_DEC, times=abs(epoch_times), rates=rep(1, n_epochs))
+
+# build cladogenetic transition probabilities
+# S = sympatry [e.g, H -> (H,H) ]; A = allopatry [e.g., ]
+clado_event_types <- [ "s", "a" ] 
+n_clado_events <- clado_event_types.size()
+clado_event_probs ~ dnDirichlet( rep(1, n_clado_events) )
+moves[++mvi] = mvSimplexElementScale(clado_event_probs, alpha=10, weight=3)
+P_DEC := fnDECCladoProbs(eventProbs=clado_event_probs,
+                         eventTypes=clado_event_types,
+                         numCharacters=n_areas,
+                         maxRangeSize=max_areas)
+
+# root frequencies
+rf_DEC_raw            <- rep(1, n_states)
+rf_DEC_raw[n_areas+1] <- 1  # Mainland (Co) is the only possible starting state
+rf_DEC                <- simplex(rf_DEC_raw)
+
+# the phylogenetic CTMC with cladogenetic events
+m_bg ~ dnPhyloCTMCClado(tree=fbd_tree,
+                           Q=Q_DEC_epoch,
+                           cladoProbs=P_DEC,
+                           branchRates=rate_bg,
+                           rootFrequencies=rf_DEC,
+                           type="NaturalNumbers",
+                           nSites=1)
+
+# attach the range data
+m_bg.clamp(dat_range_n)
+
+
+print("test5")
+
+mymodel = model(seq)
+
+monitors[++mni] = mnModel(filename="output/ucln_noconstraints.log", printgen=10)
+monitors[++mni] = mnFile(fbd_tree, filename="output/ucln_noconstraints.trees", printgen=10)
+monitors[++mni] = mnScreen(printgen=10, speciation_rate, extinction_rate)
+monitors[++mni] = mnStochasticCharacterMap(ctmc=m_bg, filename=out_fn+".stoch.log",printgen=10)
+monitors[++mni] = mnJointConditionalAncestralState(tree=fbd_tree,
+                                                       ctmc=m_bg,
+                                                       type="NaturalNumbers",
+                                                       withTips=true,
+                                                       withStartStates=true,
+                                                       filename=out_fn+".states.log",
+                                                       printgen=10)
+
+## RUN ANALYSIS
+mymcmc = mcmc(mymodel, moves, monitors, nruns = 1)
+#mymcmc.burnin(1000, tuningInterval = 100)
+mymcmc.operatorSummary()
+mymcmc.run(50000)
+
+#readTreeTrace("", treetype = "clock", outgroup = outgroup_taxa)
+#mccTree()
+
+# Restricta from big island and maui
+# Quasimodo from big island, maui and oahu
+# Hawaiiensis from all four islands
+#
