@@ -86,4 +86,5 @@ mymcmc.operatorSummary()
 mymcmc.run(12500)
 
 
-
+trace = readTreeTrace("output/non_clock.trees", treetype = "non-clock")
+maptree = mapTree(trace, "output/non_clock_maptree.nwk")
