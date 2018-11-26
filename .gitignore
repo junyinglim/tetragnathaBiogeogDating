@@ -36,6 +36,7 @@ vignettes/*.pdf
 rsconnect/
 
 .DS_Store
+history.txt
 
 # Output files and trees
 output/*.log

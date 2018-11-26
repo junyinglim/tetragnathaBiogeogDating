@@ -33,7 +33,7 @@ for (i in 1:n_data_subsets){
   Q[i] := fnGTR(ex[i], pi[i])
 
   # Gamma distributed rate variation
-  alpha[i] ~ dnUniform( 0, 1E8 )
+  alpha[i] ~ dnUniform( 0, 100 )
   gamma_rates[i] := fnDiscretizeGamma( alpha[i], alpha[i], 4, false ) # mean of 1, but shape can vary
   moves[++mvi] = mvScale(alpha[i], weight = 2.0, tune = true)
   alpha[i].setValue(1.0)
@@ -55,8 +55,7 @@ moves[mvi++] = mvNNI(topology, weight = 5.0) # used to be 0
 
 for(i in 1:n_branches){
     br_lens[i] ~ dnExponential(10.0)
-    moves[mvi++] = mvScale(br_lens[i], lambda = 1, weight = 1.0, tune = true, tuneTarget = 0.5)
-    moves[mvi++] = mvScale(br_lens[i], lambda = 1, weight = 1.0, tune = true, tuneTarget = 0.1)
+    moves[mvi++] = mvScale(br_lens[i], lambda = 1, weight = 2.0, tune = true)
 }
 psi := treeAssembly(topology, br_lens)
 
@@ -82,7 +81,7 @@ monitors[++mni] = mnScreen(printgen=10)
 
 ## RUN ANALYSIS
 mymcmc = mcmc(mymodel, moves, monitors, nruns = 4)
-mymcmc.burnin(5000, tuningInterval = 100)
+mymcmc.burnin(2000, tuningInterval = 100)
 mymcmc.operatorSummary()
 mymcmc.run(12500)
 
