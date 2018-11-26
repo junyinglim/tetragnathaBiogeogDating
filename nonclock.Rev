@@ -36,7 +36,7 @@ for (i in 1:n_data_subsets){
   alpha[i] ~ dnUniform( 0, 1E8 )
   gamma_rates[i] := fnDiscretizeGamma( alpha[i], alpha[i], 4, false ) # mean of 1, but shape can vary
   moves[++mvi] = mvScale(alpha[i], weight = 2.0, tune = true)
-  alpha[i].setValue(0.5)
+  alpha[i].setValue(1.0)
 
 }
 
@@ -82,7 +82,7 @@ monitors[++mni] = mnScreen(printgen=10)
 
 ## RUN ANALYSIS
 mymcmc = mcmc(mymodel, moves, monitors, nruns = 4)
-mymcmc.burnin(1000, tuningInterval = 100)
+mymcmc.burnin(5000, tuningInterval = 100)
 mymcmc.operatorSummary()
 mymcmc.run(12500)
 

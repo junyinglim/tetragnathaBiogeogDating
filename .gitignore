@@ -35,4 +35,8 @@ vignettes/*.pdf
 # Shiny token, see https://shiny.rstudio.com/articles/shinyapps.html
 rsconnect/
 
-*.DS_Store
+.DS_Store
+
+# Output files and trees
+output/*.log
+output/*.trees
