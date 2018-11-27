@@ -39,6 +39,4 @@ rsconnect/
 history.txt
 
 # Output files and trees
-output/*.log
-output/*.trees
-output/*.nwk
+output/*

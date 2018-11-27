@@ -5,6 +5,9 @@ range_fn = "data/spiders_biogeog.nex"
 geo_fn   = "data/hawaii"
 times_fn = geo_fn + ".times.txt"
 dist_fn  = geo_fn + ".distances.txt"
+#tree_fn = "output/non_clock_maptree.nwk"
+
+#init_tree = readBranchLengthTrees(tree_fn)
 
 mol_filenames <- listFiles("data/alignments")
 n_data_subsets <- mol_filenames.size()
@@ -20,7 +23,7 @@ dat_range_01 = readDiscreteCharacterData(range_fn)
 n_areas <- dat_range_01.nchar()
 
 # determine the number of states
-max_areas <- 4 #2
+max_areas <- 2
 n_states <- 0
 for (k in 0:max_areas) n_states += choose(n_areas, k)
 
@@ -70,7 +73,7 @@ write(state_desc_str, file=out_fn+"state_labels.txt")
 
 
 # DEFINE SUBSTITUTION AND TREE MODEL ========================
-print("test")
+print("Defining substitution and tree model")
 # Define priors
 for (i in 1:n_data_subsets){
   # Substitution model parameters
@@ -119,9 +122,9 @@ for(j in 1:n_branches) {
 }
 
 ## DIVERSIFICATION RATE FOR BIRTH-DEATH TREE MODEL ========================
-print("test2")
+print("Defining birth-death tree model")
 #tertiariaFossil ~ dnUniform(22.8, 34.0)
-originTime ~ dnUniform(6.3, 15)
+originTime ~ dnUniform(6.3, 15) 
 moves[++mvi] = mvSlide(originTime, delta = 1.0, weight = 2.0)
 
 # Speciation and extinction rate priors (N0 = 2, Nt = 4,165)
@@ -135,14 +138,10 @@ speciation_rate.setValue(1.0)
 turnover.setValue(0.95)
 
 moves[++mvi] = mvScale(speciation_rate, lambda=1.0, weight=3.0, tune = true) # used to be 5
-#moves[mvi++] = mvScale(speciation_rate, lambda=1.0, weight=2.0, tune = true)
 moves[++mvi] = mvSlide(speciation_rate, delta=0.1, weight=1.0, tune = true)
-#moves[mvi++] = mvScale(turnover, lambda=1.0, weight=1.0, tune = true)
 moves[++mvi] = mvSlide(turnover, delta=0.1, weight=3.0, tune = true) # added tuning
-#moves[mvi++] = mvSlide(turnover, delta=0.01, weight=1.0, tune = true)
 
-
-fbd_tree ~ dnBirthDeath(rootAge = abs(originTime),
+fbd_dist = dnBDP(rootAge = abs(originTime),
                         lambda = speciation_rate,
                         mu = extinction_rate,
                         rho = 1.0,
@@ -150,9 +149,10 @@ fbd_tree ~ dnBirthDeath(rootAge = abs(originTime),
                         taxa = taxa,
                         sampling = "uniform")
 
-#outgroup_taxa = clade("Te_Ve_Ca_An_AshSus-12D", "Te_Vi_Me_Me_TPhy16-1B")
-#fbd_tree ~ dnConstrainedTopology(fbd_dist, constraints = v(outgroup_taxa))
+outgroup_taxa = clade("Te_Ve_Ca_An_AshSus-12D", "Te_Vi_Me_Me_TPhy16-1B")
+fbd_tree ~ dnConstrainedTopology(fbd_dist, constraints = v(outgroup_taxa))
 #fbd_tree ~ dnConstrainedTopology(fbd_dist)
+#fbd_tree.setValue(init_tree)
 
 moves[++mvi] = mvNNI(fbd_tree, weight=30.0)
 moves[++mvi] = mvFNPR(fbd_tree, weight=10.0)
@@ -160,8 +160,15 @@ moves[++mvi] = mvNarrow(fbd_tree, weight = 5.0)
 #moves[++mvi] = mvRateAgeBetaShift(fbd_tree, branch_rates, weight=10.0)
 moves[++mvi] = mvNodeTimeSlideUniform(fbd_tree, weight=20.0)
 
-print("test3")
+# Some special moves to help with mixing
+up_down_scale_index = ++mvi
+moves[up_down_scale_index] = mvUpDownScale(weight=5.0)
+moves[up_down_scale_index].addVariable(originTime, up=true)
+moves[up_down_scale_index].addVariable(branch_rate_mean_log, up=false)
+moves[up_down_scale_index].addVariable(branch_rates, up=false) # when branch rates are high, less time has elapsed
 
+
+print("Defining phylogenetic CTMC model")
 for(i in 1:n_data_subsets){
     seq[i] ~ dnPhyloCTMC(tree = fbd_tree,
                          Q = Q[i],
@@ -174,6 +181,8 @@ for(i in 1:n_data_subsets){
 
 
 ## BIOGEOGRAPHY ========================
+
+print("Building biogeographic model")
 # fix relative anagenetic rate to 1
 rate_bg <- 1.0
 
@@ -235,7 +244,6 @@ for (i in 1:n_epochs) {
     }
 }
 
-print("test4")
 # combine the epoch rate matrices and times
 Q_DEC_epoch := fnEpoch(Q=Q_DEC, times=abs(epoch_times), rates=rep(1, n_epochs))
 
@@ -268,7 +276,7 @@ m_bg ~ dnPhyloCTMCClado(tree=fbd_tree,
 m_bg.clamp(dat_range_n)
 
 
-print("test5")
+print("Defining monitors")
 
 mymodel = model(seq)
 
@@ -285,8 +293,8 @@ monitors[++mni] = mnJointConditionalAncestralState(tree=fbd_tree,
                                                        printgen=10)
 
 ## RUN ANALYSIS
-mymcmc = mcmc(mymodel, moves, monitors, nruns = 1)
-#mymcmc.burnin(1000, tuningInterval = 100)
+mymcmc = mcmc(mymodel, moves, monitors, nruns = 10)
+mymcmc.burnin(1000, tuningInterval = 100)
 mymcmc.operatorSummary()
 mymcmc.run(50000)
 
