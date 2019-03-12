@@ -124,7 +124,8 @@ for(j in 1:n_branches) {
 ## DIVERSIFICATION RATE FOR BIRTH-DEATH TREE MODEL ========================
 print("Defining birth-death tree model")
 #tertiariaFossil ~ dnUniform(22.8, 34.0)
-originTime ~ dnUniform(6.3, 15) 
+originTime ~ dnUniform(6.3, 15)
+originTime.setValue(7.0) 
 moves[++mvi] = mvSlide(originTime, delta = 1.0, weight = 2.0)
 
 # Speciation and extinction rate priors (N0 = 2, Nt = 4,165)
@@ -150,9 +151,67 @@ fbd_dist = dnBDP(rootAge = abs(originTime),
                         sampling = "uniform")
 
 outgroup_taxa = clade("Te_Ve_Ca_An_AshSus-12D", "Te_Vi_Me_Me_TPhy16-1B")
-fbd_tree ~ dnConstrainedTopology(fbd_dist, constraints = v(outgroup_taxa))
-#fbd_tree ~ dnConstrainedTopology(fbd_dist)
-#fbd_tree.setValue(init_tree)
+ingroup_taxa = clade("RGG-008_EFKau08.JG8_12S_COI_n.sp_stelarobusta-ish__Kauai_Waiahuakua",
+                     "RGG-014_EFAuwahi00014Y40116Sb2_16S_T.stelarobusta_Maui_Auwahi",
+                     "RGG-051_PAWhHa24GJ51_COI_T.kea_Hawaii_PuuWaawaa",
+                     "RGG-0A8_MSMauiA8.6NZ35_COI_T.hawaiensis_Maui_Kipahulu",
+                     "RGG-292_RGMaPKJG14_12S_T.paludicola_Maui_PuuKukui",
+                     "RGG-339_OPal31.N_COI_T.palikea_Oahu_Palikea",
+                     "RGG-641_tantalus_2_COI_T.tantalus_Oahu_unk",
+                     "RGG-A10_EFHaPuHuHuC5A10_COI_n.sp_stelarobusta-ish_Hawaii_PuuHuluhulu",
+                     "RGG-J26_OaK33J26_COI_T.limu_Oahu_Kaala",
+                     "RGG-J33_PAOa16J33_COI_T.n.sp_pointedabdomen__Oahu_Ohikilolo",
+                     "RGG-S03_PAWhMa05JS3_COI_T.albida_Maui_Auwahi",
+                     "RGS-023_SmSpnPWaaHA23Y11216SB2_16S_T.kukuhaa_Hawaii_PuuWaawaa",
+                     "RGS-070_EFHaMKGJ70_16S_COI_n.sp_stelarobusta-ish__Hawaii_MaunaKea",
+                     "RGS-J71_OaHa09J71_16S_COI_T.lena_Oahu_Halo.Waian",
+                     "Te_Ac_Ha_Hu_TPhy16-2H",
+                     "Te_Ac_Ma_Wa_GutPhy-11F",
+                     "Te_An_Ha_Ol_TPhy16-5F",
+                     "Te_Bj_Oa_Ka_TPhy16-12B",
+                     "Te_Br_Ha_Wa_GutPhy-5G",
+                     "Te_Br_Ma_Wa_TPhy16-1C",
+                     "Te_Ef_Ka_Mw_AshSus-3G",
+                     "Te_Ef_Oa_Ta_TPhy16-4B",
+                     "Te_El_Oa_Ka_GutPhy-11H",
+                     "Te_Eo_Oa_Ka_TPhy16-3H",
+                     "Te_Eu_Ma_Pd_TPhy16-10C",
+                     "Te_Fi_Ma_Pd_TPhy16-10A",
+                     "Te_Gd_Ha_Pu_GutPhy-4F",
+                     "Te_Ha_Ha_Pu_GutPhy-3H",
+                     "Te_Ha_Ka_Wa_AshSus-3D",
+                     "Te_Ha_Oa_Ka_TPhy16-5C",
+                     "Te_Ka_Ma_Bc_TPhy16-11A",
+                     "Te_Ka_Mo_Ka_AshSus-4G",
+                     "Te_Ke_Ka_Aw_TPhy16-7D",
+                     "Te_Ki_Ma_Lw_TPhy16-8H",
+                     "Te_Ku_Oa_Ph_TPhy16-11G",
+                     "Te_Lc_Ha_Pu_TPhy16-8C",
+                     "Te_Mc_Ma_Pd_TPhy16-9G",
+                     "Te_Mk_Ka_Pi_AshSus-4A",
+                     "Te_Mo_Ka_Mw_AshSus-3F",
+                     "Te_Ob_Ha_Pu_GutPhy-5E",
+                     "Te_Pa_Ma_Bc_TPhy16-10H",
+                     "Te_Pa_Mo_Ka_AshSus-4D",
+                     "Te_Pe_Oa_Ka_TPhy16-12D",
+                     "Te_Pi_Ka_Pi_AshSus-2F",
+                     "Te_Pk_Ha_Pu_GutPhy-5D",
+                     "Te_Po_Oa_Ka_TPhy16-3B",
+                     "Te_Ps_Ca_Bo_AshSus-11H",
+                     "Te_Qu_Ha_Wa_GutPhy-5H",
+                     "Te_Qu_Ma_Wa_GutPhy-11G",
+                     "Te_Qu_Oa_Ph_TPhy16-11H",
+                     "Te_Rd_Ha_Pu_GutPhy-4E",
+                     "Te_Re_Ha_La_GutPhy-4C",
+                     "Te_Re_Ma_Lw_TPhy16-9A",
+                     "Te_St_Ma_Pd_TPhy16-11E",
+                     "Te_Tr_Ma_Wa_GutPhy-11A",
+                     "Te_Wa_Ma_Wa_GutPhy-11D",
+                     "Te_Wv_Ka_Pi_AshSus-2H",
+                     "Te_Wv_Ka_Wa_AshSus-3A" )
+
+# Create constrained tree
+fbd_tree ~ dnConstrainedTopology(fbd_dist, constraints = v(outgroup_taxa, ingroup_taxa))
 
 moves[++mvi] = mvNNI(fbd_tree, weight=30.0)
 moves[++mvi] = mvFNPR(fbd_tree, weight=10.0)
@@ -259,8 +318,9 @@ P_DEC := fnDECCladoProbs(eventProbs=clado_event_probs,
                          maxRangeSize=max_areas)
 
 # root frequencies
-rf_DEC_raw            <- rep(1, n_states)
-rf_DEC_raw[n_areas+1] <- 1  # Mainland (Co) is the only possible starting state
+
+rf_DEC_raw            <- rep(0, n_states)
+rf_DEC_raw[2] <- 1  # Set main (Co) is the only possible starting state. Need to plus one since the first state on the list is the null state
 rf_DEC                <- simplex(rf_DEC_raw)
 
 # the phylogenetic CTMC with cladogenetic events
@@ -283,25 +343,25 @@ mymodel = model(seq)
 monitors[++mni] = mnModel(filename="output/ucln_noconstraints.log", printgen=10)
 monitors[++mni] = mnFile(fbd_tree, filename="output/ucln_noconstraints.trees", printgen=10)
 monitors[++mni] = mnScreen(printgen=10, speciation_rate, extinction_rate)
-monitors[++mni] = mnStochasticCharacterMap(ctmc=m_bg, filename=out_fn+".stoch.log",printgen=10)
+monitors[++mni] = mnStochasticCharacterMap(ctmc=m_bg, filename=out_fn+"stoch.log",printgen=10)
 monitors[++mni] = mnJointConditionalAncestralState(tree=fbd_tree,
                                                        ctmc=m_bg,
                                                        type="NaturalNumbers",
                                                        withTips=true,
                                                        withStartStates=true,
-                                                       filename=out_fn+".states.log",
+                                                       filename=out_fn+"states.log",
                                                        printgen=10)
 
 ## RUN ANALYSIS
-mymcmc = mcmc(mymodel, moves, monitors, nruns = 10)
+mymcmc = mcmc(mymodel, moves, monitors, nruns = 4)
 mymcmc.burnin(1000, tuningInterval = 100)
 mymcmc.operatorSummary()
-mymcmc.run(50000)
+mymcmc.run(100000)
 
 #readTreeTrace("", treetype = "clock", outgroup = outgroup_taxa)
 #mccTree()
 
-# Restricta from big island and maui
-# Quasimodo from big island, maui and oahu
-# Hawaiiensis from all four islands
-#
+# # Restricta from big island and maui
+# # Quasimodo from big island, maui and oahu
+# # Hawaiiensis from all four islands
+# #

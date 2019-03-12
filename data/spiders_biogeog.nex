@@ -1,8 +1,8 @@
 #NEXUS
-[Data written by write.nexus.data.R, Mon Nov 26 17:07:56 2018]
+[Data written by write.nexus.data.R, Thu Jan 31 17:02:11 2019]
 BEGIN DATA;
   DIMENSIONS NTAX=60 NCHAR=5;
-  FORMAT DATATYPE=STANDARD MISSING=? GAP=- INTERLEAVE=NO symbols="0123456789";
+  FORMAT DATATYPE=STANDARD MISSING=? GAP=- INTERLEAVE=NO labels="01";
   MATRIX
     RGG-008_EFKau08.JG8_12S_COI_n.sp_stelarobusta-ish__Kauai_Waiahuakua       01000
     RGG-014_EFAuwahi00014Y40116Sb2_16S_T.stelarobusta_Maui_Auwahi             00010
