@@ -2,38 +2,46 @@
 # Summarize fossilized birth-death output
 # Author: Jun Ying Lim (with generous advice from Michael Landis)
 
-dir = "/Users/junyinglim/Desktop/susan_output/"
+dir = "output/"
+stem= "distscale2_root6"
+#
+#distscaleE-3_root6
 
-treefiles = dir+"ucln_noconstraints_run_1.trees"
-# treefiles = [dir+"ucln_noconstraints_run_1.trees",
+treefiles = dir+stem+"_run_1.trees"
+
+#[dir+stem+"_run_1.trees",
+#			dir+stem+"_run_2.trees",
+#			dir+stem+"_run_3.trees",
+#			dir+stem+"_run_4.trees"]
+
+#treefiles = [dir+"ucln_noconstraints_run_1.trees",
 # 			 dir+"ucln_noconstraints_run_2.trees",
 # 			 dir+"ucln_noconstraints_run_3.trees",
-# 			 dir+"ucln_noconstraints_run_4.trees",
-# 			 dir+"ucln_noconstraints_run_5.trees",
-# 			 dir+"ucln_noconstraints_run_6.trees",
-# 			 dir+"ucln_noconstraints_run_7.trees",
-# 			 dir+"ucln_noconstraints_run_8.trees"]
+# 			 dir+"ucln_noconstraints_run_4.trees"]
+
 treetrace = readTreeTrace(treefiles, burnin = 0.25, treetype = "clock")
 
 # Generate maximum a posteriori tree
-maptree = mapTree(treetrace, file = dir+"ucln_map.tre", mean = true, hpd = 0.95)
+maptree = mapTree(treetrace, file = dir+stem+"_ucln_map.tre", mean = true, hpd = 0.95)
 # Generate maximum clade credibility tree
-mcctree = mccTree(treetrace, file = dir+"ucln_mcc.tre", mean = true, hpd = 0.95)
+mcctree = mccTree(treetrace, file = dir+stem+"_ucln_mcc.tre", mean = true, hpd = 0.95)
 # Generate concensus tree
-contree = conTree(treetrace, file = dir+"ucln_con.tre", mean = true, hpd = 0.95)
+contree = conTree(treetrace, file = dir+stem+"ucln_con.tre", mean = true, hpd = 0.95)
 
 # Get ancestral state trace
-statetrace = readAncestralStateTrace(dir+"states_run_1.log")
-# [dir+"states_run_1.log",
-# 									  dir+"states_run_2.log",
-# 									  dir+"states_run_3.log",
-# 									  dir+"states_run_4.log",
-# 									  dir+"states_run_5.log",
-# 									  dir+"states_run_6.log",
-# 									  dir+"states_run_7.log",
-# 									  dir+"states_run_8.log"]
+print("Get ancestral state trace")
+
+# Can only be run on a single file
+statetrace = readAncestralStateTrace(dir+stem+"states_run_1.log")
+
+	# [dir+stem+"_states_run_1.log",
+ # 									  dir+stem+"_states_run_2.log",
+ # 									  dir+stem+"_states_run_3.log",
+ # 									  dir+stem+"_states_run_4.log"])
+
 # Get ancestral state tree trace
-statetreetrace = readAncestralStateTreeTrace(file = treefiles, treetype = "clock")
+statetreetrace = readAncestralStateTreeTrace(file = treefiles,
+	treetype = "clock")
 
 # Compute burn-in, relative to total number of samples
 n_burn = floor(0 * statetreetrace.getNumberSamples())
@@ -43,7 +51,7 @@ anc_tree = ancestralStateTree(tree = mcctree,
                               ancestral_state_trace_vector = statetrace,
                               tree_trace = statetreetrace,
                               include_start_states = true,
-                              file = dir + "ancstate.tre",
+                              file = dir + stem +"_ancstate.tre",
                               burnin=n_burn,
                               summary_statistic = "MAP",
                               site = 1,

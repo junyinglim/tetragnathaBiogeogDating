@@ -40,3 +40,6 @@ history.txt
 
 # Output files and trees
 output/*
+data/*
+figures/*
+analysis.notes

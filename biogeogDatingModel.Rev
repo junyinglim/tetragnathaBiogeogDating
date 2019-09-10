@@ -1,14 +1,4 @@
 
-## IMPORT DATA ========================
-out_fn <- "output/"
-range_fn = "data/spiders_biogeog.nex"
-geo_fn   = "data/hawaii"
-times_fn = geo_fn + ".times.txt"
-dist_fn  = geo_fn + ".distances.txt"
-#tree_fn = "output/non_clock_maptree.nwk"
-
-#init_tree = readBranchLengthTrees(tree_fn)
-
 mol_filenames <- listFiles("data/alignments")
 n_data_subsets <- mol_filenames.size()
 for (i in 1:n_data_subsets) {
@@ -33,7 +23,7 @@ dat_range_n = formatDiscreteCharacterData(dat_range_01, "DEC", n_states)
 # epoch times
 time_bounds <- readDataDelimitedFile(file=times_fn, delimiter=" ")
 n_epochs <- time_bounds.size()
-n_epochs <- 5
+#n_epochs <- 5
 
 # epoch connectivity
 for (i in 1:n_epochs) {
@@ -124,9 +114,12 @@ for(j in 1:n_branches) {
 ## DIVERSIFICATION RATE FOR BIRTH-DEATH TREE MODEL ========================
 print("Defining birth-death tree model")
 #tertiariaFossil ~ dnUniform(22.8, 34.0)
-originTime ~ dnUniform(6.3, 15)
-originTime.setValue(7.0) 
-moves[++mvi] = mvSlide(originTime, delta = 1.0, weight = 2.0)
+
+originTime <- 6
+#originTime ~ dnUniform(0.1, 15)
+#originTime.setValue(7.0)
+#moves[++mvi] = mvSlide(originTime, delta = 1.0, weight = 2.0)
+
 
 # Speciation and extinction rate priors (N0 = 2, Nt = 4,165)
 net_diversification_rate := abs(ln( n_taxa ) / originTime)
@@ -138,7 +131,7 @@ extinction_rate := turnover * speciation_rate
 speciation_rate.setValue(1.0)
 turnover.setValue(0.95)
 
-moves[++mvi] = mvScale(speciation_rate, lambda=1.0, weight=3.0, tune = true) # used to be 5
+moves[++mvi] = mvScale(speciation_rate, lambda=2.0, weight=4.0, tune = true) # used to be 5
 moves[++mvi] = mvSlide(speciation_rate, delta=0.1, weight=1.0, tune = true)
 moves[++mvi] = mvSlide(turnover, delta=0.1, weight=3.0, tune = true) # added tuning
 
@@ -222,7 +215,7 @@ moves[++mvi] = mvNodeTimeSlideUniform(fbd_tree, weight=20.0)
 # Some special moves to help with mixing
 up_down_scale_index = ++mvi
 moves[up_down_scale_index] = mvUpDownScale(weight=5.0)
-moves[up_down_scale_index].addVariable(originTime, up=true)
+#moves[up_down_scale_index].addVariable(originTime, up=true)
 moves[up_down_scale_index].addVariable(branch_rate_mean_log, up=false)
 moves[up_down_scale_index].addVariable(branch_rates, up=false) # when branch rates are high, less time has elapsed
 
@@ -254,9 +247,10 @@ extirpation_rate ~ dnExp(5)
 moves[++mvi] = mvScale(extirpation_rate, weight=4)
 
 # geographic distance scaler
-distance_scale ~ dnExp(1)
-distance_scale.setValue(0.01)
-moves[++mvi] = mvScale(distance_scale, weight=3)
+#distance_scale ~ dnExp(1)
+#distance_scale.setValue(0.01)
+#moves[++mvi] = mvScale(distance_scale, weight=3)
+distance_scale <- 1
 
 # then, the dispersal rate matrix
 for (i in 1:n_epochs) {
@@ -336,27 +330,7 @@ m_bg ~ dnPhyloCTMCClado(tree=fbd_tree,
 m_bg.clamp(dat_range_n)
 
 
-print("Defining monitors")
 
-mymodel = model(seq)
-
-monitors[++mni] = mnModel(filename="output/ucln_noconstraints.log", printgen=10)
-monitors[++mni] = mnFile(fbd_tree, filename="output/ucln_noconstraints.trees", printgen=10)
-monitors[++mni] = mnScreen(printgen=10, speciation_rate, extinction_rate)
-monitors[++mni] = mnStochasticCharacterMap(ctmc=m_bg, filename=out_fn+"stoch.log",printgen=10)
-monitors[++mni] = mnJointConditionalAncestralState(tree=fbd_tree,
-                                                       ctmc=m_bg,
-                                                       type="NaturalNumbers",
-                                                       withTips=true,
-                                                       withStartStates=true,
-                                                       filename=out_fn+"states.log",
-                                                       printgen=10)
-
-## RUN ANALYSIS
-mymcmc = mcmc(mymodel, moves, monitors, nruns = 4)
-mymcmc.burnin(1000, tuningInterval = 100)
-mymcmc.operatorSummary()
-mymcmc.run(100000)
 
 #readTreeTrace("", treetype = "clock", outgroup = outgroup_taxa)
 #mccTree()

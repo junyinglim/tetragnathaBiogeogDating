@@ -1,0 +1,47 @@
+## runBiogeographicModel
+
+## IMPORT DATA ========================
+out_fn <- "output/"
+range_fn = "data/spiders_biogeog.nex"
+geo_fn   = "data/hawaii"
+times_fn = geo_fn + ".times.txt"
+dist_fn  = geo_fn + ".distances.txt"
+#tree_fn = "output/non_clock_maptree.nwk"
+
+output_name = "distscale2_root6"
+
+# Model control
+#origin <- "fixed"#"prior_origin"
+#originTime <- 6
+
+# Initialize model
+source("biogeogDatingModel.Rev")
+
+
+# Additional constraints
+#distance_scale <- 0.001 # If 0 then all distances are equal
+
+
+
+
+# Initialize model
+mymodel = model(seq)
+
+print("Defining monitors")
+monitors[++mni] = mnModel(filename=out_fn+output_name+".log", printgen=10)
+monitors[++mni] = mnFile(fbd_tree, filename=out_fn+output_name+".trees", printgen=10)
+monitors[++mni] = mnScreen(printgen=10, speciation_rate, extinction_rate)
+monitors[++mni] = mnStochasticCharacterMap(ctmc=m_bg, filename=out_fn+output_name+"stoch.log",printgen=10)
+monitors[++mni] = mnJointConditionalAncestralState(tree=fbd_tree,
+                                                       ctmc=m_bg,
+                                                       type="NaturalNumbers",
+                                                       withTips=true,
+                                                       withStartStates=true,
+                                                       filename=out_fn+output_name+"states.log",
+                                                       printgen=10)
+
+## RUN ANALYSIS
+mymcmc = mcmc(mymodel, moves, monitors, nruns = 4)
+mymcmc.burnin(1000, tuningInterval = 100)
+mymcmc.operatorSummary()
+mymcmc.run(12500)
