@@ -1,5 +1,25 @@
+## 
 
-mol_filenames <- listFiles("data/alignments")
+## Directories ========================
+out_fn <- "output/"
+range_fn = "data/chupon_biogeog.nex"
+geo_fn   = "data/hawaii"
+times_fn = geo_fn + ".times.txt"
+dist_fn  = geo_fn + ".distances.txt"
+#tree_fn = "output/non_clock_maptree.nwk"
+
+output_name = "M1"
+
+
+## Load alignments ========================
+mol_filenames <- ["data/alignments/chupon_12S.fasta",
+                   "data/alignments/chupon_16S.fasta",
+                   "data/alignments/chupon_18S.fasta",
+                   "data/alignments/chupon_Actin.fasta",
+                   "data/alignments/chupon_COI.fasta",
+                   "data/alignments/chupon_CytB.fasta",
+                   "data/alignments/chupon_H3.fasta",
+                   "data/alignments/chupon_SSU.fasta"]
 n_data_subsets <- mol_filenames.size()
 for (i in 1:n_data_subsets) {
     data[i] = readDiscreteCharacterData(mol_filenames[i])
@@ -8,12 +28,13 @@ for (i in 1:n_data_subsets) {
 mvi = 0 # define move counter
 mni = 0 # define monitor counter
 
+## Import biogeographic ranges ========================
 # read binary (01) presence-absence range data
 dat_range_01 = readDiscreteCharacterData(range_fn)
 n_areas <- dat_range_01.nchar()
 
 # determine the number of states
-max_areas <- 2
+max_areas <- 4
 n_states <- 0
 for (k in 0:max_areas) n_states += choose(n_areas, k)
 
@@ -103,7 +124,7 @@ moves[++mvi] = mvSlide(branch_rate_mean_log, delta = 0.01, weight = 5.0, tune = 
 #moves[++mvi] = mvScale(branch_rate_mean_log, lambda = 1.0, weight = 5.0, tune = true)
 branch_rate_mean := 10^branch_rate_mean_log
 
-branch_rate_sd ~ dnExponential(1 / 0.58)
+branch_rate_sd ~ dnExponential(1)
 moves[++mvi] = mvScaleBactrian(branch_rate_sd, lambda = 1, weight = 10.0, tune = true)
 
 for(j in 1:n_branches) {
@@ -115,25 +136,29 @@ for(j in 1:n_branches) {
 print("Defining birth-death tree model")
 #tertiariaFossil ~ dnUniform(22.8, 34.0)
 
-originTime <- 6
+originTime ~ dnUniform(0.1, 15)
 #originTime ~ dnUniform(0.1, 15)
-#originTime.setValue(7.0)
-#moves[++mvi] = mvSlide(originTime, delta = 1.0, weight = 2.0)
+originTime.setValue(7.0)
+moves[++mvi] = mvSlide(originTime, delta = 1.0, weight = 2.0)
 
 
 # Speciation and extinction rate priors (N0 = 2, Nt = 4,165)
 net_diversification_rate := abs(ln( n_taxa ) / originTime)
-speciation_rate ~ dnExponential( lambda = 1/net_diversification_rate )
+net_diversification_rate_sd   <- 0.587405
 
-turnover ~ dnUniform(0.0, 1.0)
-extinction_rate := turnover * speciation_rate
+#speciation_rate ~ dnExponential( lambda = 1/net_diversification_rate )
 
-speciation_rate.setValue(1.0)
-turnover.setValue(0.95)
+net_div_rate ~ dnLognormal( ln(net_diversification_rate) - (net_diversification_rate_sd^2)/2, net_diversification_rate_sd )
+moves[++mvi] = mvScaleBactrian(net_div_rate, lambda=1.0, weight=5.0, tune = true)
 
-moves[++mvi] = mvScale(speciation_rate, lambda=2.0, weight=4.0, tune = true) # used to be 5
-moves[++mvi] = mvSlide(speciation_rate, delta=0.1, weight=1.0, tune = true)
-moves[++mvi] = mvSlide(turnover, delta=0.1, weight=3.0, tune = true) # added tuning
+relative_extinction_rate ~ dnUniform(0.0, 1.0)
+speciation_rate := abs(net_div_rate / (1 - relative_extinction_rate) )
+extinction_rate := speciation_rate * relative_extinction_rate
+
+
+moves[++mvi] = mvScale(net_div_rate, lambda=2.0, weight=4.0, tune = true) # used to be 5
+moves[++mvi] = mvSlide(net_div_rate, delta=0.1, weight=1.0, tune = true)
+moves[++mvi] = mvSlide(relative_extinction_rate, delta=0.1, weight=3.0, tune = true) # added tuning
 
 fbd_dist = dnBDP(rootAge = abs(originTime),
                         lambda = speciation_rate,
@@ -144,78 +169,73 @@ fbd_dist = dnBDP(rootAge = abs(originTime),
                         sampling = "uniform")
 
 outgroup_taxa = clade("Te_Ve_Ca_An_AshSus-12D", "Te_Vi_Me_Me_TPhy16-1B")
-ingroup_taxa = clade("RGG-008_EFKau08.JG8_12S_COI_n.sp_stelarobusta-ish__Kauai_Waiahuakua",
+
+ingroup_taxa = clade("Te_Bj_Oa_Ka_TPhy16-12B",
+                     "Te_Ef_Ka_Mw_AshSus-3G",
+                     "RGG-008_EFKau08.JG8_12S_COI_n.sp_stelarobusta-ish__Kauai_Waiahuakua",
                      "RGG-014_EFAuwahi00014Y40116Sb2_16S_T.stelarobusta_Maui_Auwahi",
-                     "RGG-051_PAWhHa24GJ51_COI_T.kea_Hawaii_PuuWaawaa",
-                     "RGG-0A8_MSMauiA8.6NZ35_COI_T.hawaiensis_Maui_Kipahulu",
-                     "RGG-292_RGMaPKJG14_12S_T.paludicola_Maui_PuuKukui",
-                     "RGG-339_OPal31.N_COI_T.palikea_Oahu_Palikea",
-                     "RGG-641_tantalus_2_COI_T.tantalus_Oahu_unk",
-                     "RGG-A10_EFHaPuHuHuC5A10_COI_n.sp_stelarobusta-ish_Hawaii_PuuHuluhulu",
-                     "RGG-J26_OaK33J26_COI_T.limu_Oahu_Kaala",
-                     "RGG-J33_PAOa16J33_COI_T.n.sp_pointedabdomen__Oahu_Ohikilolo",
-                     "RGG-S03_PAWhMa05JS3_COI_T.albida_Maui_Auwahi",
-                     "RGS-023_SmSpnPWaaHA23Y11216SB2_16S_T.kukuhaa_Hawaii_PuuWaawaa",
                      "RGS-070_EFHaMKGJ70_16S_COI_n.sp_stelarobusta-ish__Hawaii_MaunaKea",
-                     "RGS-J71_OaHa09J71_16S_COI_T.lena_Oahu_Halo.Waian",
-                     "Te_Ac_Ha_Hu_TPhy16-2H",
+                     "RGG-A10_EFHaPuHuHuC5A10_COI_n.sp_stelarobusta-ish_Hawaii_PuuHuluhulu",
+                     "Te_Eo_Oa_Ka_TPhy16-3H",
+                     "Te_El_Oa_Ka_GutPhy-11H",
+                     "Te_Gd_Ha_Pu_GutPhy-4F",
+                     "Te_Lc_Ha_Pu_TPhy16-8C",
+                     "RGG-J33_PAOa16J33_COI_T.n.sp_pointedabdomen__Oahu_Ohikilolo",
+                     "Te_Rd_Ha_Pu_GutPhy-4E",
+                     "Te_Wv_Ka_Pi_AshSus-2H",
+                     "Te_Wv_Ka_Wa_AshSus-3A",
                      "Te_Ac_Ma_Wa_GutPhy-11F",
+                     "RGG-S03_PAWhMa05JS3_COI_T.albida_Maui_Auwahi",
                      "Te_An_Ha_Ol_TPhy16-5F",
-                     "Te_Bj_Oa_Ka_TPhy16-12B",
                      "Te_Br_Ha_Wa_GutPhy-5G",
                      "Te_Br_Ma_Wa_TPhy16-1C",
-                     "Te_Ef_Ka_Mw_AshSus-3G",
-                     "Te_Ef_Oa_Ta_TPhy16-4B",
-                     "Te_El_Oa_Ka_GutPhy-11H",
-                     "Te_Eo_Oa_Ka_TPhy16-3H",
                      "Te_Eu_Ma_Pd_TPhy16-10C",
                      "Te_Fi_Ma_Pd_TPhy16-10A",
-                     "Te_Gd_Ha_Pu_GutPhy-4F",
-                     "Te_Ha_Ha_Pu_GutPhy-3H",
-                     "Te_Ha_Ka_Wa_AshSus-3D",
                      "Te_Ha_Oa_Ka_TPhy16-5C",
                      "Te_Ka_Ma_Bc_TPhy16-11A",
                      "Te_Ka_Mo_Ka_AshSus-4G",
                      "Te_Ke_Ka_Aw_TPhy16-7D",
+                     "Te_Ac_Ha_Hu_TPhy16-2H",
                      "Te_Ki_Ma_Lw_TPhy16-8H",
+                     "RGS-023_SmSpnPWaaHA23Y11216SB2_16S_T.kukuhaa_Hawaii_PuuWaawaa",
                      "Te_Ku_Oa_Ph_TPhy16-11G",
-                     "Te_Lc_Ha_Pu_TPhy16-8C",
+                     "Te_Ef_Oa_Ta_TPhy16-4B",
+                     "RGG-J26_OaK33J26_COI_T.limu_Oahu_Kaala",
                      "Te_Mc_Ma_Pd_TPhy16-9G",
                      "Te_Mk_Ka_Pi_AshSus-4A",
                      "Te_Mo_Ka_Mw_AshSus-3F",
                      "Te_Ob_Ha_Pu_GutPhy-5E",
+                     "RGG-339_OPal31.N_COI_T.palikea_Oahu_Palikea",
+                     "Te_Ps_Ca_Bo_AshSus-11H",
                      "Te_Pa_Ma_Bc_TPhy16-10H",
                      "Te_Pa_Mo_Ka_AshSus-4D",
+                     "RGG-292_RGMaPKJG14_12S_T.paludicola_Maui_PuuKukui",
+                     "Te_Pk_Ha_Pu_GutPhy-5D",
                      "Te_Pe_Oa_Ka_TPhy16-12D",
                      "Te_Pi_Ka_Pi_AshSus-2F",
-                     "Te_Pk_Ha_Pu_GutPhy-5D",
                      "Te_Po_Oa_Ka_TPhy16-3B",
-                     "Te_Ps_Ca_Bo_AshSus-11H",
-                     "Te_Qu_Ha_Wa_GutPhy-5H",
                      "Te_Qu_Ma_Wa_GutPhy-11G",
-                     "Te_Qu_Oa_Ph_TPhy16-11H",
-                     "Te_Rd_Ha_Pu_GutPhy-4E",
-                     "Te_Re_Ha_La_GutPhy-4C",
                      "Te_Re_Ma_Lw_TPhy16-9A",
                      "Te_St_Ma_Pd_TPhy16-11E",
+                     "RGG-641_tantalus_2_COI_T.tantalus_Oahu_unk",
                      "Te_Tr_Ma_Wa_GutPhy-11A",
-                     "Te_Wa_Ma_Wa_GutPhy-11D",
-                     "Te_Wv_Ka_Pi_AshSus-2H",
-                     "Te_Wv_Ka_Wa_AshSus-3A" )
+                     "RGS-J71_OaHa09J71_16S_COI_T.lena_Oahu_Halo.Waian",
+                     "Te_Wa_Ma_Wa_GutPhy-11D")
 
 # Create constrained tree
 fbd_tree ~ dnConstrainedTopology(fbd_dist, constraints = v(outgroup_taxa, ingroup_taxa))
+crownAgeInGroup := tmrca(fbd_tree, ingroup_taxa, stemAge = false)
 
 moves[++mvi] = mvNNI(fbd_tree, weight=30.0)
 moves[++mvi] = mvFNPR(fbd_tree, weight=10.0)
 moves[++mvi] = mvNarrow(fbd_tree, weight = 5.0)
-#moves[++mvi] = mvRateAgeBetaShift(fbd_tree, branch_rates, weight=10.0)
+moves[++mvi] = mvRateAgeBetaShift(fbd_tree, branch_rates, weight=10.0)
 moves[++mvi] = mvNodeTimeSlideUniform(fbd_tree, weight=20.0)
 
 # Some special moves to help with mixing
 up_down_scale_index = ++mvi
 moves[up_down_scale_index] = mvUpDownScale(weight=5.0)
-#moves[up_down_scale_index].addVariable(originTime, up=true)
+moves[up_down_scale_index].addVariable(originTime, up=true)
 moves[up_down_scale_index].addVariable(branch_rate_mean_log, up=false)
 moves[up_down_scale_index].addVariable(branch_rates, up=false) # when branch rates are high, less time has elapsed
 
@@ -232,110 +252,23 @@ for(i in 1:n_data_subsets){
 }
 
 
-## BIOGEOGRAPHY ========================
+mymodel = model(seq)
 
-print("Building biogeographic model")
-# fix relative anagenetic rate to 1
-rate_bg <- 1.0
+print("Defining monitors")
+monitors[++mni] = mnModel(filename=out_fn+output_name+".log", printgen=10)
+monitors[++mni] = mnFile(fbd_tree, filename=out_fn+output_name+".trees", printgen=10)
+monitors[++mni] = mnScreen(printgen=10, speciation_rate, extinction_rate)
+#monitors[++mni] = mnStochasticCharacterMap(ctmc=m_bg, filename=out_fn+output_name+"stoch.log",printgen=10)
+#monitors[++mni] = mnJointConditionalAncestralState(tree=fbd_tree,
+                                                       # ctmc=m_bg,
+                                                       # type="NaturalNumbers",
+                                                       # withTips=true,
+                                                       # withStartStates=true,
+                                                       # filename=out_fn+output_name+"states.log",
+                                                       # printgen=10)
 
-# dispersal rate
-dispersal_rate ~ dnExp(5)
-moves[++mvi] = mvScale(dispersal_rate, weight=4)
-
-# extirpation rate
-extirpation_rate ~ dnExp(5)
-moves[++mvi] = mvScale(extirpation_rate, weight=4)
-
-# geographic distance scaler
-#distance_scale ~ dnExp(1)
-#distance_scale.setValue(0.01)
-#moves[++mvi] = mvScale(distance_scale, weight=3)
-distance_scale <- 1
-
-# then, the dispersal rate matrix
-for (i in 1:n_epochs) {
-    for (j in 1:n_areas) {
-        for (k in 1:n_areas) {
-            dr[i][j][k] <- 0.0
-            if (connectivity[i][j][k] > 0) {
-                dr[i][j][k] := dispersal_rate * (distances[j][k] / distance_mean)^-distance_scale
-            }
-        }
-    }
-}
-
-# the extirpation rate matrix
-for (i in 1:n_epochs) {
-    for (j in 1:n_areas) {
-        for (k in 1:n_areas) {
-            er[i][j][k] <- 0.0
-        }
-        if (connectivity[i][j][j] > 0) {
-            er[i][j][j] := extirpation_rate
-        }
-    }
-}
-
-# build DEC rate matrices
-for (i in 1:n_epochs) {
-    Q_DEC[i] := fnDECRateMatrix(dispersalRates=dr[i],
-                                extirpationRates=er[i],
-                                maxRangeSize=max_areas,
-                                nullRange="CondSurv")
-}
-
-# build the epoch times
-for (i in 1:n_epochs) {
-    time_max[i] <- time_bounds[i][1]
-    time_min[i] <- time_bounds[i][2]
-
-    if (i == n_epochs) {
-        epoch_times[i] <- 0.0
-    } else {
-        epoch_times[i] ~ dnUniform(time_min[i], time_max[i])
-        moves[++mvi] = mvSlide(epoch_times[i], delta=(time_bounds[i][1]-time_bounds[i][2])/2)
-    }
-}
-
-# combine the epoch rate matrices and times
-Q_DEC_epoch := fnEpoch(Q=Q_DEC, times=abs(epoch_times), rates=rep(1, n_epochs))
-
-# build cladogenetic transition probabilities
-# S = sympatry [e.g, H -> (H,H) ]; A = allopatry [e.g., ]
-clado_event_types <- [ "s", "a" ] 
-n_clado_events <- clado_event_types.size()
-clado_event_probs ~ dnDirichlet( rep(1, n_clado_events) )
-moves[++mvi] = mvSimplexElementScale(clado_event_probs, alpha=10, weight=3)
-P_DEC := fnDECCladoProbs(eventProbs=clado_event_probs,
-                         eventTypes=clado_event_types,
-                         numCharacters=n_areas,
-                         maxRangeSize=max_areas)
-
-# root frequencies
-
-rf_DEC_raw            <- rep(0, n_states)
-rf_DEC_raw[2] <- 1  # Set main (Co) is the only possible starting state. Need to plus one since the first state on the list is the null state
-rf_DEC                <- simplex(rf_DEC_raw)
-
-# the phylogenetic CTMC with cladogenetic events
-m_bg ~ dnPhyloCTMCClado(tree=fbd_tree,
-                           Q=Q_DEC_epoch,
-                           cladoProbs=P_DEC,
-                           branchRates=rate_bg,
-                           rootFrequencies=rf_DEC,
-                           type="NaturalNumbers",
-                           nSites=1)
-
-# attach the range data
-m_bg.clamp(dat_range_n)
-
-
-
-
-#readTreeTrace("", treetype = "clock", outgroup = outgroup_taxa)
-#mccTree()
-
-# # Restricta from big island and maui
-# # Quasimodo from big island, maui and oahu
-# # Hawaiiensis from all four islands
-# #
+## RUN ANALYSIS
+mymcmc = mcmc(mymodel, moves, monitors, nruns = 10)
+mymcmc.burnin(5000, tuningInterval = 100)
+mymcmc.operatorSummary()
+mymcmc.run(50000)

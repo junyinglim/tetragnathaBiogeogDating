@@ -30,3 +30,33 @@ Root age ~ U(22.8, 34.0)
 - We will probably have to do model testing
 	- Distance-weighted vs. not
 	- UCLN clock vs. uexp?
+
+
+Composes of the following models
+
+## Model 1 (M1):
+* No biogeographic model + uniform root age prior of 0.1 - 15 Mya (split between viridis+versicolor and Hawaiians)
+
+## Model 2 (M2)
+** Biogeographic model + uniform root age prior of 0.1 - 15 Mya (split between viridis+versicolor and Hawaiians)
+
+## Model 3 (M3)
+** Clock model + no biogeography
+
+## Model 4 (M4)
+** Clock model + biogeographic model
+
+## Loci used
+Mitochondrial
+- COI (2905-3322) coding
+- CytB (2184-2539) coding
+- 16S (2540-2904) coding
+- 12S (1166-1524) coding
+
+Nuclear
+- ITS (1853-2183) non-coding
+- 18S (1-269)
+- SSU (796-1165)
+2. Actin (270-495)
+3. 28S (496-795)
+6. H3 (1525-1852)
