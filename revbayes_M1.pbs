@@ -1,0 +1,37 @@
+## Set job parameters
+
+## Job Name
+PBS -N tetragnatha
+
+## Project Funding Code E,g. eee_userid
+PBS -P junying.lim
+
+## Queue  Name
+PBS -q q32
+
+## By default error and output files are in format  <job_name>.e<JOB_ID> and <job_name>.o<JOB_ID>.
+## If you don't want in this format, you can change it as follows
+##PBS -o my_output.out
+##PBS -e my_error.err
+
+## Specify walltime in HH:MM:SS
+PBS -l walltime=120:00:00
+
+## Select 1 hosts (nodes) with 32 cores per Host and launch 32 MPI tasks per host
+PBS -l select=1:ncpus=10:mpiprocs=10
+
+## Load the Application
+module load sbs/revbayes/1.0.12
+module load openmpi/3.1.4/gcc-6.5.0
+
+## pre-processing script
+cd $PBS_O_WORKDIR
+
+## Capture Number of Cores
+nprocs=`cat $PBS_NODEFILE|wc -l`
+
+#Input Files. For example my_analysis.Rev
+input=biogeog_M1.Rev
+
+## Run mpi program
+mpirun -np $nprocs -machinefile $PBS_NODEFILE rb-mpi $input 2>&1
